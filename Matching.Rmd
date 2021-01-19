@@ -1,0 +1,264 @@
+---
+title: "Afghanistan Matching"
+author: "Alexandra Norris"
+date: "1/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(haven)
+library(readxl)
+library(wbstats)
+
+# matching libraries
+library(caseMatch)
+```
+
+```{r}
+# Matching variables:
+# Population size - (term_popul, governor data)
+# Territory size - (territory, territory)
+# Terrain (ruggedness; potentially land cover) - 
+# Distance to capital (geodesic) - (geo_dist_to_capital, distance)
+# Remoteness from capital (driving time) - (drive_time, distance)
+# Border province (yes/no) - (ONLY AFGHANISTAN - gov)
+# Neighboring countries (match yes/no) - (ONLY AFGHANISTAN - gov)
+
+
+distance <- read_xlsx("distance_data_afg_irq_som.xlsx") %>%
+  select(country, province, geo_dist_to_capital, drive_time)
+
+rugged <- read_csv("Admin2006_Ruggedness_1KM.csv")
+
+land <- read_csv("Admin2006_LandCover_300M.csv")
+
+```
+
+```{r}
+
+# AFGHANISTAN DATA
+
+# governor dataset
+gov_a <- read_xlsx("Governor_dataset_AFG_IRQ_SOM (3).xlsx", sheet = 1) %>%
+  mutate(country = "Afghanistan") %>%
+  select(country, province, border_province, border_country, pakistan_border) %>%
+  distinct()
+
+# territory
+# have to change names so that they can be merged with other data
+territory_a <- read_xlsx("Territory AFG, IRQ, SOM, SYR.xlsx", sheet = 1) %>%
+  mutate(province = name1) %>%
+  mutate(country = countrynm) %>%
+  select(country, province, territory) %>%
+  distinct() %>%
+  mutate(province = ifelse(as.character(province) == "Hilmand", "Helmand", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Hirat", "Herat", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Jawzjan", "Jowzjan", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Maydan Wardak", "Maidan Wardak", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Paktya", "Paktia", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Nimroz", "Nimruz", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Panjsher", "Panjshir", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Sari Pul", "Sar-e Pol", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Uruzgan", "Urozgan", as.character(province)))
+
+# distance
+distance_a <- distance %>%
+  filter(country == "Afghanistan") %>%
+  mutate(province = ifelse(as.character(province) == "Wardak", "Maidan Wardak", as.character(province)))
+
+# ruggedness, also has territory and population data
+rugged_a <- read_csv("Admin2006_Ruggedness_1KM.csv") %>%
+  filter(CNTRY_NAME == "Afghanistan") %>%
+  mutate(province = ADMIN_NAME) %>%
+  mutate(country = CNTRY_NAME) %>%
+  select(country, province, POP_ADMIN, SQKM, MEAN) %>%
+  mutate(province = ifelse(as.character(province) == "Zabol", "Zabul", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Vardak", "Maidan Wardak", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Quandahar", "Kandahar", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Parvan", "Parwan", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Oruzgan", "Urozgan", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Lowgar", "Logar", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Konduz", "Kunduz", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Konarha", "Kunar", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Kabol", "Kabul", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Ghowr", "Ghor", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Bamian", "Bamyan", as.character(province)))
+
+
+# no idea what this means
+# land cover data
+land_a <- land %>%
+  filter(CNTRY_NAME == "Afghanistan") %>%
+  mutate(province = ADMIN_NAME) %>%
+  mutate(country = CNTRY_NAME) %>%
+  select(country, province, Value, Count, GLOBCOVER_)
+  
+
+# join afghanistan data all together
+a <- merge(gov_a, territory_a, all.x = TRUE, all.y = TRUE)
+
+a <- merge(a, distance_a, all.x = TRUE, all.y = TRUE)
+
+afghanistan <- merge(a, rugged_a, all.x = TRUE, all.y = TRUE)
+
+
+```
+
+```{r}
+
+# AFGHANISTAN MATCHING
+
+# Define matching variables
+mvars_a <- c("country", "province", "border_province", "pakistan_border", "territory", "geo_dist_to_capital", "drive_time", "POP_ADMIN", "SQKM", "MEAN")
+
+# Define the "leftover" variables in the dataset to not include in the matching
+# - can only include numeric variables in the case match
+dropvars_a <- c("country", "province", "border_country")
+
+out_a <- (case.match(data=afghanistan, id.var="province", leaveout.vars=dropvars_a,
+                    distance="mahalanobis", case.N=2, 
+                    number.of.matches.to.return=10)) 
+
+```
+
+
+
+```{r}
+
+# IRAQ DATA
+
+# there aren't any unique data points from the governor dataset for Iraq
+
+# terrritory
+# change the spellings so that data can be merged
+territory_i <- read_xlsx("Territory AFG, IRQ, SOM, SYR.xlsx", sheet = 2) %>%
+  mutate(province = name1) %>%
+  mutate(country = countrynm) %>%
+  select(country, province, territory) %>%
+  distinct() %>%
+  mutate(province = ifelse(as.character(province) == "Muhafazat Erbil", "Erbil", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Muhafazat al-Qadisiya", "Al-Qādisiyyah", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "al-Anbar", "Al Anbar", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "al-Muthanna", "Muthanna", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "al-Najaf", "Najaf", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "al-Sulaimaniya", "Sulaymaniyah", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Babylon", "Babil", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Basrah", "Basra", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Diala", "Diyala", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Duhouk", "Duhok", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Kerbela", "Karbala", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Salah al-Deen", "Saladin", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Thi Qar", "Dhi Qar", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Thi Qar", "Dhi Qar", as.character(province)))
+
+
+# distance
+distance_i <- distance %>%
+  filter(country == "Iraq")
+
+# ruggedness, also has territory and population data
+rugged_i <- read_csv("Admin2006_Ruggedness_1KM.csv") %>%
+  filter(CNTRY_NAME == "Iraq") %>%
+  mutate(province = ADMIN_NAME) %>%
+  mutate(country = CNTRY_NAME) %>%
+  select(country, province, POP_ADMIN, SQKM, MEAN) %>%
+  mutate(province = ifelse(as.character(province) == "Al Basrah", "Basra", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Al Muthanna", "Muthanna", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Al Qadisiyah", "Al-Qādisiyyah", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "An Najaf", "Najaf", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Arbil", "Erbil", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "As Sulaymaniyah", "Sulaymaniyah", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "At Ta'min", "Kirkuk", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Dahuk", "Duhok", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Karbala'", "Karbala", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Ninawa", "Nineveh", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Salah ad Din", "Saladin", as.character(province)))
+  
+# merge data
+
+i <- merge(territory_i, distance_i, all.x = TRUE, all.y = TRUE)
+
+iraq <- merge(i, rugged_i, all.x = TRUE, all.y = TRUE)
+
+```
+
+```{r}
+
+# IRAW MATCHING
+
+# Define matching variables
+mvars_i <- c("province", "territory", "geo_dist_to_capital", "drive_time", "POP_ADMIN", "SQKM", "MEAN")
+
+# Define the "leftover" variables in the dataset to not include in the matching
+# - can only include numeric variables in the case match
+dropvars_i <- c("country", "province")
+
+out_i <- (case.match(data=iraq, id.var="province", leaveout.vars=dropvars_i,
+                    distance="mahalanobis", case.N=2, 
+                    number.of.matches.to.return=10)) 
+
+```
+
+```{r}
+
+# Somalia Data
+
+# don't need the governor dataset
+
+# territory
+territory_s <- read_xlsx("Territory AFG, IRQ, SOM, SYR.xlsx", sheet = 3) %>%
+  mutate(province = name1) %>%
+  mutate(country = countrynm) %>%
+  select(country, province, territory) %>%
+  distinct()
+
+# distance
+distance_s <- distance %>%
+  filter(country == "Somalia")
+
+# ruggedness, also has territory and population data
+rugged_s <- read_csv("Admin2006_Ruggedness_1KM.csv") %>%
+  filter(CNTRY_NAME == "Somalia") %>%
+  mutate(province = ADMIN_NAME) %>%
+  mutate(country = CNTRY_NAME) %>%
+  select(country, province, POP_ADMIN, SQKM, CELL_COUNT, MIN, MAX, RANGE, MEAN, STD, SUM)
+
+s <- merge(territory_s, distance_s, all.x = TRUE, all.y = TRUE)
+
+somalia <- merge(s, rugged_s, all.x = TRUE, all.y = TRUE)
+
+```
+
+```{r}
+
+# Load Data from package caseMatch
+library(caseMatch)
+data(EU)
+## Define matching variables
+mvars <- c("socialist","rgdpc","FHc","FHp","trade")
+# Define the "leftover" variables in the dataset to not include in the matching
+dropvars <- c("countryname", "population", "eu")
+
+out <- (case.match(data=EU, id.var="countryname", leaveout.vars=dropvars,
+                    distance="mahalanobis", case.N=2, 
+                    number.of.matches.to.return=10)) 
+
+out$cases
+
+
+out2 <- (case.match(data=EU, id.var="countryname", leaveout.vars=dropvars,
+                   distance="mahalanobis", case.N=2, 
+                   number.of.matches.to.return=10,
+                   treatment.var="socialist", max.variance=TRUE))
+
+
+
+
+```
+
+
+
+
