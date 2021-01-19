@@ -11,10 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(haven)
 library(readxl)
-library(wbstats)
-
-# matching libraries
 library(caseMatch)
+
 ```
 
 ```{r}
@@ -181,13 +179,27 @@ rugged_i <- read_csv("Admin2006_Ruggedness_1KM.csv") %>%
 
 i <- merge(territory_i, distance_i, all.x = TRUE, all.y = TRUE)
 
-iraq <- merge(i, rugged_i, all.x = TRUE, all.y = TRUE)
+i <- merge(i, rugged_i, all.x = TRUE, all.y = TRUE)
+
+# create KRI province
+i %>%
+  filter(province %in% c("Erbil", "Duhok", "Sulaymaniyah"))
+
+# to create the KRI variable I will add the area and population data, average
+# the terrain data, and use the Erbil data for distance to capital and drive time
+# this is all based off of the data from Erbil, Duhok, and Sulaymaniyah
+
+df <- data_frame("country" = "Iraq", "province" = "KRI", "territory" = 38866.33, "geo_dist_to_capital" = 321, "drive_time" = 5, "POP_ADMIN" = 2659991, "SQKM" = 40598.74, "MEAN" = 292.4788)
+
+# Merge KRI data with Iraq data
+
+iraq <- rbind(i, df)
 
 ```
 
 ```{r}
 
-# IRAW MATCHING
+# IRAQ MATCHING
 
 # Define matching variables
 mvars_i <- c("province", "territory", "geo_dist_to_capital", "drive_time", "POP_ADMIN", "SQKM", "MEAN")
@@ -209,6 +221,7 @@ out_i <- (case.match(data=iraq, id.var="province", leaveout.vars=dropvars_i,
 # don't need the governor dataset
 
 # territory
+# territory data is in region form not province so I'm not merging it
 territory_s <- read_xlsx("Territory AFG, IRQ, SOM, SYR.xlsx", sheet = 3) %>%
   mutate(province = name1) %>%
   mutate(country = countrynm) %>%
@@ -224,40 +237,37 @@ rugged_s <- read_csv("Admin2006_Ruggedness_1KM.csv") %>%
   filter(CNTRY_NAME == "Somalia") %>%
   mutate(province = ADMIN_NAME) %>%
   mutate(country = CNTRY_NAME) %>%
-  select(country, province, POP_ADMIN, SQKM, CELL_COUNT, MIN, MAX, RANGE, MEAN, STD, SUM)
+  select(country, province, POP_ADMIN, SQKM, MEAN) %>%
+  mutate(province = ifelse(as.character(province) == "Galguduud", "Galgudud", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Hiiraan", "Hiran", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Jubbada Dhexe", "Middle Juba", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Jubbada Hoose", "Lower Juba", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Shabeellaha Dhexe", "Middle Shabelle", as.character(province))) %>%
+  mutate(province = ifelse(as.character(province) == "Shabeellaha Hoose", "Lower Shabelle", as.character(province)))
 
-s <- merge(territory_s, distance_s, all.x = TRUE, all.y = TRUE)
-
-somalia <- merge(s, rugged_s, all.x = TRUE, all.y = TRUE)
+# merge data
+somalia <- merge(distance_s, rugged_s, all.x = TRUE, all.y = TRUE)
 
 ```
 
 ```{r}
 
-# Load Data from package caseMatch
-library(caseMatch)
-data(EU)
-## Define matching variables
-mvars <- c("socialist","rgdpc","FHc","FHp","trade")
-# Define the "leftover" variables in the dataset to not include in the matching
-dropvars <- c("countryname", "population", "eu")
+# SOMALIA MATCHING
 
-out <- (case.match(data=EU, id.var="countryname", leaveout.vars=dropvars,
+# Define matching variables
+mvars_s <- c("geo_dist_to_capital", "drive_time", "POP_ADMIN", "SQKM", "MEAN")
+
+# Define the "leftover" variables in the dataset to not include in the matching
+# - can only include numeric variables in the case match
+dropvars_s <- c("country", "province")
+
+out_s <- (case.match(data=somalia, id.var="province", leaveout.vars=dropvars_s,
                     distance="mahalanobis", case.N=2, 
                     number.of.matches.to.return=10)) 
 
-out$cases
-
-
-out2 <- (case.match(data=EU, id.var="countryname", leaveout.vars=dropvars,
-                   distance="mahalanobis", case.N=2, 
-                   number.of.matches.to.return=10,
-                   treatment.var="socialist", max.variance=TRUE))
-
-
-
-
 ```
+
+
 
 
 
